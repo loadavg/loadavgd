@@ -31,10 +31,14 @@ if  ( (defined('STDIN') && isset($argv[1]) && ($argv[1] == 'status'))   ) {
 }
 
 $timemode = false;
+$st = $et = null;
 
 if  ( (defined('STDIN') && isset($argv[1]) && ($argv[1] == 'time'))   ) {
 	$timemode = true;
 	$loadavg->setStartTime(); // Setting page load start time
+
+	echo "Start Time : " . $loadavg->timeStart . " \n"; 
+
 }
 
 //check for api server data transfer
@@ -60,7 +64,8 @@ foreach ( $dates as $date ) {
 }
 // End of delete old logs
 
-
+//when sending api data we call data gathering 2x this is unnecssary
+//we only need to call 1x and return data as string or true/false
 
 if (!$testmode) {
 
@@ -75,6 +80,7 @@ if (!$testmode) {
 		if ( $moduleSettings['module']['logable'] == "true" ) {
 			foreach ( $moduleSettings['logging']['args'] as $args) { // loop trought module logging arguments
 
+
 				$args = json_decode($args); // decode arguments
 				$class = LoadAvg::$_classes[$module]; // load module information
 
@@ -83,18 +89,45 @@ if (!$testmode) {
 
 				$class->logfile = $logdir . $args->logfile; // the modules logfile si read from args
 
-				$class->$caller(); // call data gethering function of module
+
+				if  ( $timemode  ) 
+					$st = $loadavg->getTime();
+
+				//we can add 3 different modes to caller
+				//log - log data
+				//api - send back for api only no logging
+				//logapi - log and send back for api
+				$logMode = "api";
 
 				// collect data for API server
 				if ( $api ) {
+					$responseData = $class->$caller($logMode);
 
-					$responseData = $class->$caller('api'); // call data gethering function of module
-					$data = explode("|", $responseData); // parsing response data
-					$timestamp = $data[0];
+					if (is_array($responseData))
+					{
+						$timestamp = "";
+						$dataInterface = "";
 
-					$response[$module] = array("data" => $responseData, "timestamp" => $timestamp); // Populating response array
+						foreach ($responseData as $interface => $value) {
+						    //echo 'INT: ' . $interface . ' VAL: ' . $value . "\n";
+							$data = explode("|", $value); // parsing response data
+							$dataInterface[$interface] = array("data" => $value, "timestamp" => $data[0]);
+						}
+						$response[$module] = $dataInterface;
+
+					} else {
+						$data = explode("|", $responseData); // parsing response data
+						$timestamp = $data[0];
+						$response[$module] = array("data" => $responseData, "timestamp" => $timestamp); // Populating response array
+					}
 				}
-				// end collect data for API server	
+				else
+					$class->$caller(); 
+
+				if  ( $timemode  ) {
+					$et = $loadavg->getTime();
+					echo "Module " . $module . " Time : " .   ($et - $st)   . " \n";
+				}
 
 			}
 		}
@@ -102,6 +135,7 @@ if (!$testmode) {
 
 	// Send data to API server
 	if ( $api ) {
+		//print_r($response) ;
 		$apistatus = $loadavg->sendApiData($response);
 	 }
 
@@ -146,7 +180,6 @@ if  ( $timemode ) {
 
 	$mytime = (float) $loadavg->timeFinish - (float) $loadavg->timeStart;
 
-	echo "Start Time : " . $loadavg->timeStart . " \n"; 
 	echo "End   Time : " . $loadavg->timeFinish . " \n"; 
 
 	echo "Total Time : " . $mytime . " \n"; 

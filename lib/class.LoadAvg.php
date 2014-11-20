@@ -53,7 +53,7 @@ class LoadAvg
 	{
 
 		date_default_timezone_set("UTC");
-		self::$settings_ini = "settings.ini";
+		self::$settings_ini = "settings.ini.php";
 
 		$this->setSettings('general',
 			parse_ini_file(APP_PATH . '/config/' . self::$settings_ini, true)
@@ -75,7 +75,8 @@ class LoadAvg
 		}
 
 		if (is_dir(HOME_PATH . '/lib/modules/')) {
-			foreach (glob(HOME_PATH . "/lib/modules/*/*.php") as $filename) {
+
+			foreach (glob(HOME_PATH . "/lib/modules/*/class.*.php") as $filename) {
 				$filename = explode(".", basename($filename));
 				self::$_modules[$filename[1]] = strtolower($filename[1]);
 			}
@@ -107,8 +108,6 @@ class LoadAvg
 
 	public function createFirstLogs()
 	{
-
-		echo "Create Logs  \n";
 
 		//only does it if DIR is empty ?
 		if ( $this->is_dir_empty(HOME_PATH . '/' . self::$_settings->general['logs_dir']) ) {
@@ -243,10 +242,10 @@ class LoadAvg
 
 				$caller = $chart->function;
 				$stuff = $this->$caller( (isset($moduleSettings['module']['url_args']) && isset($_GET[$moduleSettings['module']['url_args']])) ? $_GET[$moduleSettings['module']['url_args']] : '2' );
-				$no_logfile = false;
+				$logfileStatus = false;
 				
 			} else {
-				$no_logfile = true;
+				$logfileStatus = true;
 			}
 			
 			include APP_PATH . '/views/chart.php';
@@ -362,7 +361,8 @@ class LoadAvg
 
 	public function checkInstaller() {
 
-		$install_loc = "../install/index.php";
+
+		$install_loc = HOME_PATH . "/install/index.php";
 
 		if ( file_exists($install_loc) )
 			return false;
@@ -379,13 +379,89 @@ class LoadAvg
 
 	public function checkInstall() {
 
-		$install_loc = "../install/index.php";
+		$install_loc = HOME_PATH . "/install/index.php";
 
-		if ( file_exists($install_loc) )
-			header("Location: ../install/index.php");
+		if ( file_exists($install_loc) ) {
+			ob_end_clean();
+            header("Location: ../install/index.php");
+		}
 	}
 
 
+	/**
+	 * cleanUpInstaller
+	 *
+	 * Checks if is still installation progress and redirects if TRUE.
+	 *
+	 */
+
+	public function cleanUpInstaller() {
+
+		//location of core settings
+		$settings_file = APP_PATH . '/config/settings.ini.php';
+
+		//see if we can write to settings file
+		if ( $this->checkWritePermissions( $settings_file ) ) 
+		{
+			/* 
+			 * Create first log files for all active modules 
+			 * only executes if there are no log files
+	 		 */		
+			$this->createFirstLogs();
+
+			/* 
+			 * clean up installation files
+	 		 */	
+
+			//if installer is not present (true) leave
+			if ( $this->checkInstaller() ) {
+				header("Location: index.php");
+			} 
+			else 
+			{
+				//clean up - try to delete installer if we have permissions
+				$installer_file = HOME_PATH . "/install/index.php";
+				$installer_loc = HOME_PATH . "/install/";
+
+				unlink($installer_file);
+				rmdir($installer_loc);
+
+				//check again if it worked exit
+				if ( $this->checkInstaller() ) {
+					header("Location: index.php");
+				}
+				else
+				{ 
+					//if not throw a error and exit
+					require_once APP_PATH . '/layout/secure.php'; 
+					require_once APP_PATH . '/layout/footer.php'; 
+					
+					exit;
+				}
+			}
+		} else {
+			header("Location: /install/index.php?step=1");
+		}
+	}
+
+
+	function checkRedline (array &$data) 
+	{
+
+		// clean data for missing values
+		$redline = ($data[1] == "-1" ? true : false);
+
+		if ($redline) {
+			$data[1]=0.0;
+			$data[2]=0.0;
+			$data[3]=0.0;
+		}
+
+		//echo '<pre>'; print_r ($data); echo '</pre>';
+
+		return $redline;
+
+	}
 
 	/*
 	 * build the chart data array here and patch to check for downtime
@@ -398,11 +474,87 @@ class LoadAvg
 	 */
 
 
+	function getChartData (array &$chartData, array &$contents, $interval = 400) 
+	{				
+		// this is based on logger interval of 5, 5 min = 300 aprox we add 100 to be safe
+		//$interval = 360;  // 5 minutes is 300 seconds + slippage of 20% aprox 
+		
+		$interval = $this->getLoggerInterval();
+
+		if (!$interval)
+			$interval = 360; //default interval of 5 min
+		else
+			$interval = $interval * 1.2; //add 20% to interval for system lag
+
+		$patch = $chartData = array();
+		$numPatches = 0;
+
+		$totalContents= (int)count( $contents );
+
+		//for ( $i = 0; $i < $totalContents-1; $i++) {
+		for ( $i = 0; $i < $totalContents-1; ++$i) {
+
+			$data = explode("|", $contents[$i]);
+			$nextData = explode("|", $contents[$i+1]);
+
+			//load chartData
+			$chartData[$i] = $data;
+			
+			//difference in timestamps
+			$difference = $nextData[0] - $data[0];
+
+			/*
+			 * check if difference is more than logging interval and patch
+			 * we patch for time between last data (system went down) and next data (system came up)
+			 * need to check if we need the nextData patch as well ie if system came up within 
+			 * the next interval time
+			 * 
+			 * for local data we dont check the first value in the data set
+			 */
+			if ($i > 0) {
+
+				if ( $difference >= $interval ) {
+
+					//echo 'patch difference:' . $difference;
+
+					$patch[$numPatches] = array(  ($data[0]+$interval), "-1", "-1", "-1", $i);
+					$patch[$numPatches+1] = array(  ($nextData[0]- ($interval/2)), "-1", "-1", "-1", $i);
+
+					$numPatches += 2;
+				}	
+			}
+		}
+		
+		//iterates through the patcharray and patches dataset
+		//by adding patch points
+		$totalPatch= (int)count( $patch );
+
+		//echo "PATCHCOUNT: " . $totalPatch . "<br>";
+
+		for ( $i = 0; $i < $totalPatch ; ++$i) {
+				
+				$patch_time = ( ($patch[$i][4]) + $i );
+				
+				// this unset should work to drop recorded patch time ? 
+				// but messes up sizeof patcharray				
+				$thepatch[0] = array ( $patch[$i][0] , $patch[$i][1] , $patch[$i][2] , $patch[$i][3] );
+
+				//print_r ($thepatch); echo "<br>";
+
+				array_splice( $chartData, $patch_time, 0, $thepatch );
+
+        		//echo "PATCHED: " . $patch_time . " count: " . count( $chartData ) . "<br>";
+
+		}
+
+		//echo "PATCHARRAYPATCHED: " . count( $chartData ) . "<br>";
+}
+
 
 	/**
 	 * parseInfo
 	 *
-	 * Parses ini file data for a module
+	 * Parses ini file data for a module into lines of text for legend display
 	 *
 	 * @param array $info array with info lines from the classes INI file
 	 * @param array $variables variables to format lines
@@ -460,7 +612,6 @@ class LoadAvg
 				for ($i = 0; $i < count($sval); $i++) {
 					$res[] = $skey . '[] = \'' . $sval[$i] . '\'';
 				}
-				#echo '<pre>';var_dump($res);echo'</pre>';
 			} else {
 	        	    	if (strpos($sval, ";") === 0)
 		            		$res[] = $sval;
@@ -477,11 +628,17 @@ class LoadAvg
 	        }
 	    }
 
+	    //we should use this instead
+	    //LoadAvg::safefilerewrite($file, implode("\r\n", $res));
+
+	    //security header here
+	    $header = "; <?php exit(); __halt_compiler(); ?>\n";
+
 	    if ($fp = fopen($file, 'w') ) {
+	    	fwrite($fp, $header);	    	
 	    	fwrite($fp, implode("\r\n", $res));
 	    	fclose($fp);
 	    }
-	    //LoadAvg::safefilerewrite($file, implode("\r\n", $res));
 	}
 
 	//modified to not clean numeric values
@@ -511,7 +668,7 @@ class LoadAvg
 	public static function write_module_ini($newsettings, $module_name)
 	{
 
-		$module_config_file = HOME_PATH . '/lib/modules/' . $module_name . '/' . strtolower( $module_name ) . '.ini';
+		$module_config_file = HOME_PATH . '/lib/modules/' . $module_name . '/' . strtolower( $module_name ) . '.ini.php';
 
 		//$this->write_php_ini($newsettings, $module_config_file);
 		self::write_php_ini($newsettings, $module_config_file);
@@ -634,6 +791,7 @@ class LoadAvg
 
 		// for debugging
 		//var_dump($data); //exit;
+		//echo 'DEBUG: ' .  json_encode($data);
 
 		$url = self::$_settings->general['api']['url'];
 
@@ -641,15 +799,20 @@ class LoadAvg
 		$server_url = $url . '/servers/';
 
 		//validate API access here
+		if ( self::$_settings->general['api']['server_token'] && self::$_settings->general['api']['key'] ) {		
 		$ch =  curl_init($server_url . self::$_settings->general['api']['server_token'] . '/' . self::$_settings->general['api']['key'] . '/v');
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		$account_valid = curl_exec($ch);
+		} else
+			$account_valid = 'false';
 
 		//get server id from server token
+		if ( self::$_settings->general['api']['server_token'] ) {			
 		$ch =  curl_init($server_url . self::$_settings->general['api']['server_token'] . '/t');
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		$server_exists = curl_exec($ch);
-
+		} else
+			$server_exists = 'false';
 
 		//echo $server_url.json_decode($server_exists)->id.'/data';
 
@@ -697,7 +860,7 @@ class LoadAvg
 	 * @return string $result message returned from the server
 	 */
 
-	public function testApiConnection( $echo = false ) {
+	public static function testApiConnection( $echo = false ) {
 
 		$url = self::$_settings->general['api']['url'];
 
@@ -705,28 +868,37 @@ class LoadAvg
 		$server_url = $url . '/servers/';
 		
 		//validate users api key
-		$ch =  curl_init($user_url . self::$_settings->general['api']['key'] . '/va');
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-		$user_exists = curl_exec($ch);
+		if ( self::$_settings->general['api']['key'] ) {
+			$ch =  curl_init($user_url . self::$_settings->general['api']['key'] . '/va');
+			curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+			$user_exists = curl_exec($ch);
+		} else
+			$user_exists = 'false';
+
 
 		//val;idate server token
-		$ch =  curl_init($server_url . self::$_settings->general['api']['server_token'] . '/vs');
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-		$server_exists = curl_exec($ch);
+		if ( self::$_settings->general['api']['server_token'] ) {
+			$ch =  curl_init($server_url . self::$_settings->general['api']['server_token'] . '/vs');
+			curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+			$server_exists = curl_exec($ch);
+		} else
+			$server_exists = 'false';		
 
 		//validate api key against server token
-		$ch =  curl_init($server_url . self::$_settings->general['api']['server_token'] . '/' . self::$_settings->general['api']['key'] . '/v');
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-		$server_valid = curl_exec($ch);
-
+		if ( self::$_settings->general['api']['server_token'] && self::$_settings->general['api']['key'] ) {
+			$ch =  curl_init($server_url . self::$_settings->general['api']['server_token'] . '/' . self::$_settings->general['api']['key'] . '/v');
+			curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+			$server_valid = curl_exec($ch);
+		} else
+			$server_valid = 'false';
 
 		if ($echo) {
 
-			echo ($user_exists == 'false' ?  'API Key : INVALID ' :  'API Key : VALID ');
+			echo ($user_exists == 'false' ?  "API Key : INVALID \n" :  "API Key : VALID \n");
 
-			echo ($server_exists == 'false' ?  'Server Token : INVALID ' :  'Server Token : VALID ');
+			echo ($server_exists == 'false' ?  "Server Token : INVALID \n" :  "Server Token : VALID \n");
 			
-			echo ($server_valid == 'false' ?  'Server Access : INVALID ' :  'Server Access : VALID ');
+			echo ($server_valid == 'false' ?  "Server Access : INVALID \n" :  "Server Access : VALID \n");
 
 		}
 
@@ -737,7 +909,200 @@ class LoadAvg
 			return true;
 	}
 
+	/**
+	 * logIn
+	 *
+	 * User login, checks username and password from default settings to match.
+	 *
+	 * @param string $username the username
+	 * @param string $password the password
+	 */
 
+	public function logIn( $username, $password ) 
+	{
+		if ( isset($username) && isset($password) ) 
+		{
+			if ($username == LoadAvg::$_settings->general['username'] && md5($password) == LoadAvg::$_settings->general['password']) 
+			{
+				$_SESSION['logged_in'] = true;
+
+				if (isset(self::$_settings->general['checkforupdates'])) 
+				{
+					//check for updates at login
+					$this->checkForUpdate();
+				}
+
+
+				if($_POST['remember-me']) {
+
+					$cookie_time = self::$_settings->general['rememberme_interval'];
+
+					if ( $cookie_time <1 || !$cookie_time )
+						$cookie_time = 1;
+
+					$cookietime = time() + (86400 * $cookie_time); // 1 day
+
+					setcookie('loadremember', true, $cookietime);
+					setcookie('loaduser', $username, $cookietime);
+					setcookie('loadpass', md5($password), $cookietime);
+				}
+				elseif(!$_POST['remember-me']) {
+
+					$past = time() - 100;
+
+					if( isset($_COOKIE['loadremember']) ) 
+						setcookie('loadremember', 0, $past);
+
+					if(isset($_COOKIE['loaduser'])) 
+						setcookie('loaduser', 0, $past);
+
+					if(isset($_COOKIE['loadpass'])) 
+						setcookie('loadpass', 0, $past);
+				}
+
+			}
+
+		}
+	}
+
+	/**
+	 * isLoggedIn
+	 *
+	 * Checks if the user is logged in and has SESSION started.
+	 *
+	 * @return boolean TRUE if is logged in and FALSE if not.
+	 */
+
+	public function isLoggedIn()
+	{
+		if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] == true) {
+			return true;
+		} else {
+			return false;
+		}
+	}
+
+	/**
+	 * logOut
+	 *
+	 * Logs out user and destroys SESSION data.
+	 *
+	 */
+
+	public static function logOut() { 
+
+		//used to clean up remember me functionality
+		$past = time() - 100;
+
+		if(isset($_COOKIE['loaduser'])) 
+			setcookie('loaduser', 0, $past);
+
+		if(isset($_COOKIE['loadpass'])) 
+			setcookie('loadpass', 0, $past);
+
+		//clean up session
+		session_destroy(); 
+
+	}
+
+
+	/**
+	 * checkCookies
+	 *
+	 * Checks if the user is logged in and has SESSION started.
+	 *
+	 * @return boolean TRUE if is logged in and FALSE if not.
+	 */
+
+	public function checkCookies()
+	{
+
+		if ( isset($_COOKIE['loaduser']) && isset($_COOKIE['loadpass']) ) {
+
+			echo 'found cookies';
+
+			if (         $_COOKIE['loaduser'] == LoadAvg::$_settings->general['username'] 
+		          &&     $_COOKIE['loadpass'] == LoadAvg::$_settings->general['password'] ) 
+			{
+				return true;        
+			} 
+		}
+
+		return false;
+
+	}
+
+	/**
+	 * checkIpBan
+	 *
+	 * Checks if the user is logged in and has SESSION started.
+	 *
+	 * @return boolean TRUE if is logged in and FALSE if not.
+	 */
+
+	public function checkIpBan()
+	{
+
+		$blacklist = APP_PATH . '/config/banned_ip.ini';
+
+		//get the ip address best we can
+		if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
+		    $ip = $_SERVER['HTTP_CLIENT_IP'];
+		} elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+		    $ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
+		} else {
+		    $ip = $_SERVER['REMOTE_ADDR'];
+		}
+
+
+		if ( file_exists( $blacklist )) {
+
+			$ip_array  = parse_ini_file($blacklist);
+			$ip_array = explode ( ',' , $ip_array['banned']);
+
+			if ( in_array($ip,$ip_array)) {
+				return true;
+				$this->logUpdateCheck( "BANNED LOGIN" . $ip );
+			} else {
+				return false;				
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * logFlooding
+	 *
+	 * Checks if the user is logged in and has SESSION started.
+	 *
+	 * @return boolean TRUE if is logged in and FALSE if not.
+	 */
+
+	public function logFlooding()
+	{
+
+		if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
+		    $ip = $_SERVER['HTTP_CLIENT_IP'];
+		} elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+		    $ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
+		} else {
+		    $ip = $_SERVER['REMOTE_ADDR'];
+		}
+
+	    $response = "Login flooding by ip:" . $ip;
+
+		$this->logUpdateCheck( $response );
+
+	}
+		
+	/**
+	 * getNetworkInteraces
+	 *
+	 * Retrives network interfaces
+	 *
+	 * @return array $interfaces array of interfaces found on server
+	 */
 
 	public static function getNetworkInterfaces()
 	{
@@ -767,6 +1132,20 @@ class LoadAvg
 		return $interfaces;
 	}
 
+	/**
+	 * getTime
+	 *
+	 * Sets startTime of page load
+	 *
+	 */
+
+	public function getTime()
+	{
+		$time = microtime();
+		$time = explode(' ', $time);
+		$time = $time[1] + $time[0];
+		return $time;
+	}
 
 	/**
 	 * setStartTime
@@ -820,15 +1199,26 @@ class LoadAvg
 	 * @return array $return array with list of dates
 	 */
 
+	//grabs dates of ALL log files to be safe but would be faster if it did just one module
+
 	public static function getDates()
 	{
 		$dates = array();
+
 		foreach ( glob(dirname(__FILE__) . "/../logs/*.log") as $file ) {
 			preg_match("/([0-9-]+)/", basename($file), $output_array);
+		
 			if ( isset( $output_array[0] ) && !empty( $output_array[0] ) )
 				$dates[] = $output_array[0];
 		}
-		return array_unique($dates);
+
+ 		//get rid of all duplicate dates
+		$dates = array_unique($dates);
+
+		//need to properly sort the array before returning it
+		asort ($dates);
+
+		return $dates;
 	}
 
 	/**
@@ -843,7 +1233,7 @@ class LoadAvg
 		$fh = fopen(dirname(__FILE__) . '/../logs/update.log', 'a+');
 		$logLine = "Update check at " . date("Y-m-d H:i:s a") . " ---- Response: " . $response . PHP_EOL;
 		if ( $fh ) {
--			fwrite($fh, $logLine);
+			fwrite($fh, $logLine);
 			fclose($fh);
 		}
 
@@ -856,22 +1246,86 @@ class LoadAvg
 	 *
 	 */
 
+public function getLinuxDistro()
+    {
+        //declare Linux distros(extensible list).
+        $distros = array(
+                "Arch" => "arch-release",
+                "Debian" => "debian_version",
+                "Fedora" => "fedora-release",
+                "Ubuntu" => "lsb-release",
+                'Redhat' => 'redhat-release',
+                'CentOS' => 'centos-release');
+    //Get everything from /etc directory.
+    $etcList = scandir('/etc');
+
+    //Loop through /etc results...
+    $OSDistro;
+    foreach ($etcList as $entry)
+    {
+        //Loop through list of distros..
+        foreach ($distros as $distroReleaseFile)
+        {
+            //Match was found.
+            if ($distroReleaseFile === $entry)
+            {
+                //Find distros array key(i.e. Distro name) by value(i.e. distro release file)
+                $OSDistro = array_search($distroReleaseFile, $distros);
+
+                break 2;//Break inner and outer loop.
+            }
+        }
+    }
+
+    return $OSDistro;
+
+  }
+
+
 	public function checkForUpdate()
 	{
+
+		$linuxname = "";
+
+		//check that this works with get as its long...
+		/*
+		<?php
+		print_r(posix_uname());
+		?>
+
+		Should print something like:
+
+		Array
+		(
+		    [sysname] => Linux
+		    [nodename] => vaio
+		    [release] => 2.6.15-1-686
+		    [version] => #2 Tue Jan 10 22:48:31 UTC 2006
+		    [machine] => i686
+		)
+		*/
+		
+		//foreach(posix_uname() AS $key=>$value) {
+    		//$linuxname .= $value ." ";
+		//}		
+
+		$linuxname = $this->getLinuxDistro();
 
 		if ( !isset($_SESSION['download_url'])) {
 			if ( ini_get("allow_url_fopen") == 1) {
 
-				#$response = file_get_contents("http://updates.loadavg.com/version.php?site_url=" . $_SERVER['SERVER_ADDR']  . "&ip=" . $_SERVER['SERVER_ADDR'] . "&version=" . self::$_settings->general['version'] . "&key=1");
-				// $response = json_decode($response);
+				$response = file_get_contents("http://updates.loadavg.com/version.php?"
+					. "ip=" . $_SERVER['SERVER_ADDR'] 
+					. "&version=" . self::$_settings->general['version'] 
+					. "&site_url=" . self::$_settings->general['title']  
+					. "&phpv=" . phpversion()  					 
+					. "&osv=" . $linuxname  					 
+					. "&key=1");
 
-				$response = file_get_contents("http://updates.loadavg.com/version.php?site_url=" 
-					. $_SERVER['SERVER_ADDR']  . "&ip=" . $_SERVER['SERVER_ADDR'] . "&version=" . self::$_settings->general['version'] . "&key=1");
+				// $response = json_decode($response);
 
 				//log the action locally
 				$this->logUpdateCheck( $response );
-
-				//var_dump("http://updates.loadavg.com/version.php?site_url=" . $_SERVER['SERVER_ADDR']  . "&ip=" . $_SERVER['SERVER_ADDR'] . "&version=" . self::$_settings->general['version'] . "&key=1");
 
 				 	$_SESSION['download_url'] = "http://www.loadavg.com/download/";
 
