@@ -14,10 +14,6 @@
 * later.
 */
 
-
-
-
-
 class Cpu extends LoadAvg
 {
 	public $logfile; // Stores the logfile name & path
