@@ -1,0 +1,14 @@
+
+g++ -o output source.cpp
+
+http://www.ntu.edu.sg/home/ehchua/programming/cpp/gcc_make.html
+
+
+
+http://www.cplusplus.com/doc/tutorial/
+
+
+ini file parser
+
+http://code.google.com/p/inih/source/browse/trunk
+

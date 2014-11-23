@@ -174,12 +174,12 @@ class LoadAvg
 		}
 	}
 
-/*
- * used when we turn modules on and off
- * this needs to only build the log file for modules that have no log file in /logs
- * also be great to pass the module over if we know 
- * what module has changed or been enabled
- */
+	/*
+	 * used when we turn modules on and off
+	 * this needs to only build the log file for modules that have no log file in /logs
+	 * also be great to pass the module over if we know 
+	 * what module has changed or been enabled
+	 */
 
 	public static function rebuildLogs()
 	{
@@ -215,11 +215,11 @@ class LoadAvg
 	}
 
 
-/*
- * used to test if log files are being created by logger
- * needs better testing currently a bit of a hack
- * as we just test if the log directory is empty or not
- */
+	/*
+	 * used to test if log files are being created by logger
+	 * needs better testing currently a bit of a hack
+	 * as we just test if the log directory is empty or not
+	 */
 
  	function testLogs( $mode = true)
 	{
