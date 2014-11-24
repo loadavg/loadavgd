@@ -199,6 +199,14 @@ int main ( int argc, char *argv[] )
     outputFileName = argv[1];
   }
 
+  cout << "-----------------------------------------------" << endl;
+  cout << "Starting logger version : " << loadavg_version << endl;
+  
+  cout << "Location ROOT: " << SCRIPT_ROOT << endl;
+  cout << "Location HOME: " << HOME_PATH << endl;
+  cout << "Location APP : " << APP_PATH << endl;
+  cout << "Location LOG : " << LOG_PATH << endl;
+
   //set the log file
   //outputFileName = "copylog.log";
   loadavg.setLogfile(outputFileName.c_str());
@@ -208,9 +216,6 @@ int main ( int argc, char *argv[] )
   time(&beginTime);
 
   cout << "Start time : " << beginTime << endl;
-
-
-
 
   //get the load
   vector<double> theLoad;
