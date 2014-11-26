@@ -22,6 +22,7 @@
 
 using namespace std;
 
+#include "globals.h"
 /*
  * main LoadAvg class
  *
