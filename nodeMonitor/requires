@@ -1,0 +1,7 @@
+requires
+
+express@3.x.x
+
+nodemon
+
+
