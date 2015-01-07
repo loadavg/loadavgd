@@ -21,6 +21,10 @@
 #include <thread>
 #include <numeric>
 
+//yum install gtk3-devel gtk2-devel
+#include <gtk/gtk.h>
+
+
 using namespace std;
 
 /*
@@ -73,6 +77,7 @@ class LoadAvg {
     /**
      *   process log file
      **/    
+    bool runParser (string, string); 
     bool processLog (void); 
     bool copyLog (string);
 
@@ -82,6 +87,7 @@ class LoadAvg {
     double difftime(clock_t ,clock_t );
 
     void sleep(int);
+
 
 };
 

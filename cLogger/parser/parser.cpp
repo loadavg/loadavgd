@@ -10,6 +10,7 @@
 vector<string> basicArray;
 vector<string> pluginArray;
 vector<string> optionsArray;
+vector<string> includeArray;
 
 
 //need to move to this ASAP
@@ -18,6 +19,7 @@ typedef struct collectLog {
   vector<string> basicArray;
   vector<string> pluginArray;
   vector<string> optionsArray;
+  vector<string> includeArray;
 
 } collectLog_t;
 
@@ -100,10 +102,21 @@ bool LoadAvg::processLog (void)
           }
         }
 
+
         // means a basic variable
         if (keeplooking == false && match == false ) {
+
+          size_t found = Next.find("Include");
+          if (found!=std::string::npos) {
+            includeArray.push_back(Next);  
+            match = true; 
+          }
+
+
+          else {
             basicArray.push_back(Next);  
             match = true; 
+          }
         }
 
         //means keep parsing until we find a closing </Plugin>
@@ -152,6 +165,12 @@ bool LoadAvg::processLog (void)
   cout << "Options array : " << optionsArray.size() << endl;
   cout << "-----------------------------" << endl;
   this->printVectorArray(optionsArray);
+  cout << endl;
+
+  cout << "-----------------------------" << endl;
+  cout << "Includes array : " << includeArray.size() << endl;
+  cout << "-----------------------------" << endl;
+  this->printVectorArray(includeArray);
   cout << endl;
 
   cout << "-----------------------------" << endl;
@@ -204,6 +223,9 @@ bool LoadAvg::copyLog (string outputFile)
   this->saveHeader("Writing out the plugin settings",oFile);
   this->saveVector(optionsArray,oFile);
  
+   this->saveHeader("Writing out additional includes",oFile);
+  this->saveVector(includeArray,oFile);
+
   cout << "Copyed data to file: ";
   cout << endl;
 
@@ -232,6 +254,68 @@ string LoadAvg::Parser(istream& In)
   return nextLine;
 }
 
+
+
+
+/*
+ * runs the main parser to parse and clean log files
+ *
+ */
+
+bool LoadAvg::runParser (string inputFile, string outputFile) 
+{
+
+  bool status;
+ 
+  cout << "-----------------------------" << endl;
+  cout << "- starting log file parsing -" << endl;
+  cout << "-----------------------------" << endl;
+  cout << endl;
+
+  //begin timers
+  time_t beginTime, endTime; 
+
+  time(&beginTime);
+
+  cout << "Start time : " << beginTime << endl;
+
+  //set the config file name here
+  this->setLogfile(inputFile);
+
+  //process the file
+  cout << endl;
+
+  status = this->processLog(); 
+
+  //see if it worked
+  cout << endl;
+
+  if (status)
+      cout << "Parse successful" << endl;
+  else
+      cout << "Parse failed" << endl;
+
+
+  cout << "-----------------------------" << endl;
+
+  cout << "Copying new settings to file" << endl;
+
+  //copy the file - should do this from array
+  status = this->copyLog(outputFile); 
+
+
+
+  time(&endTime);
+  cout << "End time : " << endTime << endl;
+  double timeSpan = this->difftime(endTime,beginTime);
+  cout << "Time elapsed: " << timeSpan << " ms" << endl;
+
+  cout << "-----------------------------" << endl;
+
+
+  return true;
+  
+}
 
 
 
