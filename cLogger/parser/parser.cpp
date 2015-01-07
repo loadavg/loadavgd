@@ -6,9 +6,26 @@
 
 #include "parser.h"
 
+//these are currently GLOBALS!!
+vector<string> basicArray;
+vector<string> pluginArray;
+vector<string> optionsArray;
+
+
+//need to move to this ASAP
+typedef struct collectLog {
+
+  vector<string> basicArray;
+  vector<string> pluginArray;
+  vector<string> optionsArray;
+
+} collectLog_t;
+
+
 
 LoadAvg::LoadAvg () {
   logFile = "";
+
 }
 
 LoadAvg::LoadAvg (string filename) {
@@ -29,11 +46,6 @@ string LoadAvg::getLogfile(void) {
 }
 
 
-
-
-
-
-
 /*
  * process the log file
  *
@@ -52,31 +64,71 @@ bool LoadAvg::processLog (void)
   int i = 0;
   string Next;
 
-  vector<string> basicArray;
-  vector<string> pluginArray;
-  vector<string> optionsArray;
-
   cout << "Parsing file : " << logFile << endl;
+
+  bool keeplooking = false;
 
   while (!iFile.eof()) {
 
-    //Next = loadavg.Parser(iFile); // grab a line from the file
-    Next = this->Parser(iFile); // grab a line from the file
+    // grab a line from the file
+    Next = this->Parser(iFile); 
 
     if (!Next.empty()) {
 
+      //skip whats turned off for now
       if ( Next.front() != '#' )
       {
 
-            //trying a basic parse here of data
+        bool match = false;
+
+        //keeplooking means we found a <Plugin
+        //used to mark a dataset
+        if (keeplooking == false )
+        {
+          size_t found = Next.find("LoadPlugin");
+          if (found!=std::string::npos) {
+            pluginArray.push_back(Next);  
+            match = true; 
+          }
+          else {
+            size_t found = Next.find("<Plugin");
+            if (found!=std::string::npos) {
+              optionsArray.push_back(Next);  
+              match = true; 
+              keeplooking = true;
+            }
+          }
+        }
+
+        // means a basic variable
+        if (keeplooking == false && match == false ) {
+            basicArray.push_back(Next);  
+            match = true; 
+        }
+
+        //means keep parsing until we find a closing </Plugin>
+        if (keeplooking == true && match == false )
+        {
+          size_t found = Next.find("</Plugin>");
+          if (found!=std::string::npos) {
+            optionsArray.push_back(Next);  
+            keeplooking = false;
+          }
+          else {
+            optionsArray.push_back(Next);  
+          }
+        }
+
+            /*
+             * code to parse basic array data sets
+
             auto v = this->explode(Next, ' ');
+            
+            //now put it back togeather!
             string s;
             s = accumulate(begin(v), end(v), s);
-
             basicArray.push_back(s);            
-            
-            //as opposed to just the data
-            //myArray.push_back(Next);            
+            */
 
             i++;
       }
@@ -84,15 +136,34 @@ bool LoadAvg::processLog (void)
 
   }
 
+  cout << "-----------------------------" << endl;
+  cout << "Basic array : " << basicArray.size() << endl;
+  cout << "-----------------------------" << endl;
   this->printVectorArray(basicArray);
+  cout << endl;
 
-  cout << "Array size : " << basicArray.size() << endl;
+  cout << "-----------------------------" << endl;
+  cout << "Plugin array : " << pluginArray.size() << endl;
+  cout << "-----------------------------" << endl;
+  this->printVectorArray(pluginArray);
+  cout << endl;
 
+  cout << "-----------------------------" << endl;
+  cout << "Options array : " << optionsArray.size() << endl;
+  cout << "-----------------------------" << endl;
+  this->printVectorArray(optionsArray);
+  cout << endl;
+
+  cout << "-----------------------------" << endl;
   cout << "Total lines : " << i << endl;
+  cout << "-----------------------------" << endl;
 
   iFile.close();
 
-  return true;
+  if ( i > 0)
+    return true;
+  else
+    return false;
 }
 
 
@@ -107,20 +178,9 @@ bool LoadAvg::copyLog (string outputFile)
 {
 
 
-  //grab the input file
-  ifstream iFile(logFile); 
-
-  if (iFile.fail() || !iFile.good() ) {
-    cout << "File not found: " << logFile << endl;
-    return false;
-  } else {
-    cout << "Source file : " << logFile << endl;    
-  }
-
   //grab the output file
   //
   ofstream oFile(outputFile); 
-  //ofstream oFile(outputFile, std::ofstream::out | std::ofstream::app); //write at end of file / append
 
   if (oFile.fail() || !oFile.good() ) {
     cout << "File not found: " << logFile << endl;
@@ -130,39 +190,23 @@ bool LoadAvg::copyLog (string outputFile)
   }
 
 
-
-  int i = 0;
-  string Next;
-
-  cout << "Copying file: ";
-
-  while (!iFile.eof()) {
-
-    //Next = loadavg.Parser(iFile); // grab a line from the file
-    Next = this->Parser(iFile); // grab a line from the file
-
-    if (!Next.empty()) {
-
-      if ( Next.front() != '#' )
-      {
-          auto v = this->explode(Next, '|');
-
-          this->saveVector(v,oFile);
-          oFile << endl;
-
-          //progress report one dot per line copied
-          cout << ".";
-
-          i++;
-      }
-
-    }
-  }
-
+  cout << "Copying data to file: ";
   cout << endl;
-  cout << "Total lines : " << i << endl;
 
-  iFile.close();
+  this->saveHeader("Writing out the config file",oFile);
+
+  this->saveHeader("Writing out the core settings",oFile);
+  this->saveVector(basicArray,oFile);
+
+  this->saveHeader("Writing out the plugins",oFile);
+  this->saveVector(pluginArray,oFile);
+
+  this->saveHeader("Writing out the plugin settings",oFile);
+  this->saveVector(optionsArray,oFile);
+ 
+  cout << "Copyed data to file: ";
+  cout << endl;
+
   oFile.close();
 
   return true;

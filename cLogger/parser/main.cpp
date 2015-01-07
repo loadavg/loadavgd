@@ -85,7 +85,7 @@ int main ( int argc, char *argv[] )
 
   cout << "-----------------------------" << endl;
 
-  cout << "copying file" << endl;
+  cout << "Copying new settings to file" << endl;
 
   //copy the file - should do this from array
   status = loadavg.copyLog(outputFileName); 

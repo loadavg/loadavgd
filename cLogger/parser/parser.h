@@ -60,6 +60,7 @@ class LoadAvg {
     void printVector (std::vector <std::string> &); 
     void printVector (std::vector <double> &); 
     void saveVector (std::vector <std::string> &, ofstream &);
+    void saveHeader (std::string, ofstream &);
 
     /**
      *   explode string into vector

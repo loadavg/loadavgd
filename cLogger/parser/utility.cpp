@@ -90,28 +90,30 @@ void LoadAvg::printVector (vector <double> &v)
 
 void LoadAvg::saveVector (vector <string> &v, ofstream &outputFile) 
 {
-    outputFile << "[";
     size_t last = v.size() - 1;
     for(size_t i = 0; i < v.size(); ++i) 
     {
         outputFile << v[i];
-        if (i != last) 
-            outputFile << ", ";
+        outputFile << endl;
     }
-    outputFile << "]";
-    //outputFile << endl;
 
-    //return out;
+    outputFile << endl;
+
 }
 
+void LoadAvg::saveHeader (string data, ofstream &outputFile) 
+{
 
+        outputFile << "#" << endl;
+        outputFile << "# " << data << endl;
+        outputFile << "#" << endl;
+        outputFile << endl;
+
+}
 
 
 void LoadAvg::printLoadAvg(void) 
 {
-  
-  //int getloadavg(double loadavg[], int nelem);
-  //int load = getloadavg(double loadavg[], 5);
 
   double load[3];
   if (getloadavg(load, 3) != -1) /*getloadavg is the function used to calculate and obtain the load average*/
