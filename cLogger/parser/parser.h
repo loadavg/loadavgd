@@ -19,6 +19,7 @@
 #include <ctime>
 #include <chrono>
 #include <thread>
+#include <numeric>
 
 using namespace std;
 
@@ -55,6 +56,7 @@ class LoadAvg {
     /**
      *   print out a vecotr.
      **/
+    void printVectorArray (std::vector <std::string> &); 
     void printVector (std::vector <std::string> &); 
     void printVector (std::vector <double> &); 
     void saveVector (std::vector <std::string> &, ofstream &);
