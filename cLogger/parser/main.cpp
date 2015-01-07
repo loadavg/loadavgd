@@ -28,7 +28,13 @@ print_hello (GtkWidget *widget,
              gpointer   data)
 {
   g_print ("Running Collectd Parser Now...\n\n");
+
+    //clean arrays
+    loadavg.resetParser( );
+
+    //run the parser
     loadavg.runParser(inputFileName.c_str() , outputFileName.c_str() );
+
 
 }
 
@@ -83,16 +89,16 @@ int main ( int argc, char *argv[] )
   }
 
 
-  //this is repalced by gtk calls referenced below
+  /*
+   * this is repalced by gtk calls referenced below
+   */
+
   //loadavg.runParser(inputFileName.c_str() , outputFileName.c_str() );
 
 
+  //hack this in now matey
 
-
-
- //hack this in now matey
-
-   GtkWidget *window;
+  GtkWidget *window;
   GtkWidget *grid;
   GtkWidget *button;
 
@@ -117,17 +123,11 @@ int main ( int argc, char *argv[] )
   g_signal_connect (button, "clicked", G_CALLBACK (print_hello), NULL);
 
   /* Place the first button in the grid cell (0, 0), and make it fill
-   * just 1 cell horizontally and vertically (ie no spanning)
+   * just 2 cell horizontally and vertically (ie no spanning)
    */
-  gtk_grid_attach (GTK_GRID (grid), button, 0, 0, 1, 1);
+  gtk_grid_attach (GTK_GRID (grid), button, 0, 0, 2, 1);
 
-  button = gtk_button_new_with_label ("Run Parser");
-  g_signal_connect (button, "clicked", G_CALLBACK (print_hello), NULL);
 
-  /* Place the second button in the grid cell (1, 0), and make it fill
-   * just 1 cell horizontally and vertically (ie no spanning)
-   */
-  gtk_grid_attach (GTK_GRID (grid), button, 1, 0, 1, 1);
 
   button = gtk_button_new_with_label ("Quit");
   g_signal_connect (button, "clicked", G_CALLBACK (gtk_main_quit), NULL);

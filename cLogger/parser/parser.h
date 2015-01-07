@@ -81,6 +81,9 @@ class LoadAvg {
     bool processLog (void); 
     bool copyLog (string);
 
+    void resetParser(void); 
+
+
     void printLoadAvg(void);
     bool getLoadAvg(vector<double> &); 
 

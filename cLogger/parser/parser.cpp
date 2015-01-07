@@ -12,7 +12,6 @@ vector<string> pluginArray;
 vector<string> optionsArray;
 vector<string> includeArray;
 
-
 //need to move to this ASAP
 typedef struct collectLog {
 
@@ -253,6 +252,25 @@ string LoadAvg::Parser(istream& In)
   
   return nextLine;
 }
+
+/*
+ * reads in a line from the log file 
+ *
+ */
+
+void LoadAvg::resetParser( ) 
+{
+  
+  basicArray.clear();
+  pluginArray.clear();
+  optionsArray.clear();
+  includeArray.clear();
+
+}
+
+
+
+
 
 
 
