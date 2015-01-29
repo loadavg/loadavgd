@@ -1,0 +1,83 @@
+
+HOW TO SET UP Collectd Monitor
+
+1. Install all system pre-reqs
+
+a. Install redis and make sure its running
+
+b. Install node and make sure its working
+
+c. Install collectd and make sure its working with basic plugins (load/memory,uptime)
+
+set a log interval of 100 to 300 seconds or too much data comes in to start
+
+use csv plugin to test that data is being recorded locally
+
+2. Configure collectd httpd_write plugin to send data to localhost port 8080
+
+<Plugin write_http>
+        <URL "http://localhost:8080/api">
+                User "collectd"
+                Password "weCh3ik0"
+#               VerifyPeer true
+#               VerifyHost true
+#               CACert "/etc/ssl/ca.crt"
+                Format "JSON"
+#               StoreRates false
+        </URL>
+</Plugin>
+
+3. Install collectdmonitor package 
+
+npm install
+
+4. in new termianl start collectd
+
+a. service collectd restart
+
+node terminal should say
+
+Received data round: 1 >>  Thu Jan 29 2015 11:52:41 GMT-0500 (EST)
+
+b. to force a ping on the server, restart collectd any time
+
+service collectd restart
+
+5. open redis-cli and test data ciming into redis
+
+a. first run monitor
+
+redis-cli monitor
+
+b. restart collectd to push data
+
+service collectd restart
+
+should show live data streaming in
+
+6. browse data
+
+a. find incoming data
+
+keys snippet*
+
+b. show all keys for snippet
+
+keys snippet:4*
+
+c. show all keys for snippet
+
+keys snippet:4:cpu*
+
+d. get data for snippet
+
+get snippet:4:cpu:4
+
+6. restart once everything is working
+
+a. to flush the redis database
+flushdb
+
+b. restart node app
+
+c. restart collectd
