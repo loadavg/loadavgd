@@ -1,4 +1,5 @@
 /*
+
 http://www.ibm.com/developerworks/cloud/library/cl-bluemix-node-redis-app/index.html
 
 also taken from
@@ -11,23 +12,19 @@ https://gist.github.com/ixzo/4750663
 */
 
 /*
-to view data in redis using redis-cli
+ auth_to_expressjs_with_curl.sh
+https://gist.github.com/ryankirkman/892018
 
-show all keys for snippet
-keys snippet:94:cpu*
-
-get data for snippet
-get snippet:94:cpu:4
-
-flush the database
-flushdb
 */
-
+ 
 //initalize express
 var express = require("express");
 var fs = require('fs');
 var http = require('http');
 var path = require('path');
+
+var queryString = require('querystring');
+var url = require('url');
 
 var app = express();
 app.set('port', 8080);
@@ -64,6 +61,26 @@ app.get('/', function(req, res) {
 
 // create API endpoint 
 app.post('/api', function(req, res) {
+
+  /*
+   * hacked this in for authentication from collectd
+   * but getting no auth headers in data sent over from write_http plugin 
+   * https://github.com/collectd/collectd/blob/master/src/write_http.c
+   * need these to validate posts ?
+   * HELP: IRC #collectd channel
+   */
+
+  var header=req.headers['authorization']||'',        // get the header
+      token=header.split(/\s+/).pop()||'',            // and the encoded auth token
+      auth=new Buffer(token, 'base64').toString(),    // convert from base64
+      parts=auth.split(/:/),                          // split on colon
+      username=parts[0],
+      password=parts[1];
+
+  //res.writeHead(200,{'Content-Type':'text/plain'});
+  //res.end('username is "'+username+'" and password is "'+password+'"');
+  //console.log('username is "'+username+'" and password is "'+password+'"');
+
   message = req.body;
   
   //var date = new Date();
